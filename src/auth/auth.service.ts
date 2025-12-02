@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnModuleInit, UnauthorizedException } from '@nestjs/common';
 
 import { UserService } from 'src/user/user.service';
 import { JwtService } from '@nestjs/jwt';
@@ -11,7 +11,8 @@ import { jwtPayload } from 'src/common/types';
 
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
+  private readonly logger = new Logger(UserService.name);
   constructor(
     private userService: UserService,
     private jwtService: JwtService
@@ -21,7 +22,7 @@ export class AuthService {
     try {
       let user = await this.validateUser(dto)      
       const payload: jwtPayload = {
-        userId: user._id.toString(),
+        userId: user.id,
         username: user.username,
         role: user.role
       };
@@ -30,16 +31,8 @@ export class AuthService {
         access_token: this.jwtService.sign(payload),
       };
     } catch (error) {
-      return error?.response;
+      throw error
     }
-  }
-  
-  async signup(dto: SignUpDto) {
-    return this.userService.create(dto);
-  }
-  
-  async logout() {
-    return 'Logout successful';
   }
   
   private async validateUser(dto: loginDto) {
@@ -49,7 +42,6 @@ export class AuthService {
     } else {
       user = await this.userService.findByUsername(dto.emailOrUsername);
     }
-    
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -66,5 +58,25 @@ export class AuthService {
       throw new NotFoundException('Invalid password');
     }
     return user
+  }
+
+  async generateAdminUser() {
+    const pass = await bcrypt.hash('administrator', 10)
+    const userData = {
+      username: "administrator",
+      email: "admin@mail.com",
+      password: pass,
+      role: "admin"
+    }   
+    try {
+      await this.userService.createUser(userData)
+      this.logger.log("User admin created")
+    } catch (error) {
+      this.logger.error(error.message)
+    }  
+  }
+
+  onModuleInit() {
+    this.generateAdminUser()
   }
 }
